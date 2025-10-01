@@ -3,8 +3,8 @@
 #include <string.h>
 #include <ctype.h>
 
-#define MAX_ROWS 1000
-#define MAX_COLS 1000
+#define MAX_ROWS 100
+#define MAX_COLS 100
 #define CELL_LEN 64
 #define FORMULA_MAX 256
 
@@ -27,16 +27,16 @@ char edit_buffer[CELL_LEN];
 // Scroll offsets
 int row_offset = 0, col_offset = 0;
 
-// --- LIMPIAR \r ---
+// --- NUEVA FUNCIÓN PARA LIMPIAR \r ---
 void sanitize(char *s) {
     char *p = s;
     while (*p) {
-        if (*p == '\r') *p = '\0';
+        if (*p == '\r') *p = '\0';  // corta en \r
         p++;
     }
 }
 
-// Excel-style nombre de celda
+// Convierte índices a nombre estilo Excel (A1, B2, etc.)
 void cell_name(int row, int col, char *buf) {
     char colname[10];
     int c = col;
@@ -50,7 +50,7 @@ void cell_name(int row, int col, char *buf) {
     sprintf(buf + len, "%d", row + 1);
 }
 
-// Parsear referencia
+// Convierte nombre estilo Excel a índices
 int parse_cell(const char *ref, int *row, int *col) {
     int c = 0, r = 0, i = 0;
     while (isalpha(ref[i])) {
@@ -133,12 +133,12 @@ void update_dynamic_ref() {
     sheet[formula_row][formula_col].data[CELL_LEN - 1] = '\0';
 }
 
-// Dibujar hoja solo visible
+// Dibujar hoja con scroll
 void draw_sheet() {
     clear();
     int max_y, max_x;
     getmaxyx(stdscr, max_y, max_x);
-    int visible_rows = max_y - 5;
+    int visible_rows = max_y - 5; // dejar espacio para mensajes
     int visible_cols = max_x / 12;
 
     if (cur_row < row_offset) row_offset = cur_row;
@@ -244,7 +244,7 @@ void fill_formula_column(int col) {
 void load_csv(const char *filename) {
     FILE *f = fopen(filename, "r");
     if (!f) return;
-    char line[4096];
+    char line[1024];
     int row = 0;
     nrows = 0; ncols = 0;
     while (fgets(line, sizeof(line), f) && row < MAX_ROWS) {
@@ -253,7 +253,7 @@ void load_csv(const char *filename) {
         while (token && col < MAX_COLS) {
             strncpy(sheet[row][col].data, token, CELL_LEN-1);
             sheet[row][col].data[CELL_LEN-1] = '\0';
-            sanitize(sheet[row][col].data);
+            sanitize(sheet[row][col].data); // limpiar ^M
             col++;
             token = strtok(NULL, ",\n");
         }
