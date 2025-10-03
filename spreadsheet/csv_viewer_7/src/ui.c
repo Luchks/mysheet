@@ -102,16 +102,16 @@ void display_sheet(Sheet *sheet, const char *filename) {
             }
         }
 
-        mvprintw(max_y-1, 0, "jklh: mover | i: editar | s: guardar | u: undo | Ctrl+R: redo | q: salir");
+        mvprintw(max_y-1, 0, "Flechas: mover | Enter: editar | s: guardar | u: undo | Ctrl+R: redo | q: salir");
         refresh();
         ch = getch();
 
         if (ch == 'q') break;
-        else if (ch == 'j' && active_row < sheet->nrows - 1) active_row++;
-        else if (ch == 'k' && active_row > 0) active_row--;
-        else if (ch == 'l' && active_col < sheet->ncols - 1) active_col++;
-        else if (ch == 'h' && active_col > 0) active_col--;
-        else if (ch == 'i') {
+        else if (ch == KEY_DOWN && active_row < sheet->nrows - 1) active_row++;
+        else if (ch == KEY_UP && active_row > 0) active_row--;
+        else if (ch == KEY_RIGHT && active_col < sheet->ncols - 1) active_col++;
+        else if (ch == KEY_LEFT && active_col > 0) active_col--;
+        else if (ch == '\n' || ch == KEY_ENTER) {
             edit_cell(sheet, active_row, active_col);
         }
         else if (ch == 's') {
