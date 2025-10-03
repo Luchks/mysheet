@@ -27,36 +27,6 @@ char edit_buffer[CELL_LEN];
 // Scroll offsets
 int row_offset = 0, col_offset = 0;
 
-// Para navegación tipo Vim
-int last_ch = 0;
-
-// --- FILTROS ---
-int filter_active = 0;
-int filter_col = -1;
-char filter_value[CELL_LEN];
-
-int filter_matches(int row) {
-    if (!filter_active || filter_col < 0 || filter_col >= ncols) return 1;
-    return strstr(sheet[row][filter_col].data, filter_value) != NULL;
-}
-
-void activate_filter() {
-    echo();
-    mvprintw(nrows + 5, 0, "Filtrar columna (A=0, B=1,...): ");
-    scanw("%d", &filter_col);
-    mvprintw(nrows + 6, 0, "Valor a filtrar: ");
-    getnstr(filter_value, CELL_LEN-1);
-    noecho();
-    filter_active = 1;
-    cur_row = 0; row_offset = 0;
-}
-
-void deactivate_filter() {
-    filter_active = 0;
-    filter_col = -1;
-    cur_row = 0; row_offset = 0;
-}
-
 // --- LIMPIAR \r ---
 void sanitize(char *s) {
     char *p = s;
@@ -163,8 +133,8 @@ void update_dynamic_ref() {
     sheet[formula_row][formula_col].data[CELL_LEN - 1] = '\0';
 }
 
-// Dibujar hoja con filtro aplicado
-void draw_sheet_filtered() {
+// Dibujar hoja solo visible
+void draw_sheet() {
     clear();
     int max_y, max_x;
     getmaxyx(stdscr, max_y, max_x);
@@ -177,35 +147,26 @@ void draw_sheet_filtered() {
     if (cur_col < col_offset) col_offset = cur_col;
     else if (cur_col >= col_offset + visible_cols) col_offset = cur_col - visible_cols + 1;
 
-    // Encabezados de columnas
+    for (int i = 0; i < visible_rows && i + row_offset < nrows; i++) {
+        for (int j = 0; j < visible_cols && j + col_offset < ncols; j++) {
+            int r = i + row_offset;
+            int c = j + col_offset;
+            if (edit_mode && r == cur_row && c == cur_col)
+                mvprintw(i, j * 12, "%-11s", edit_buffer);
+            else if (sheet[r][c].data[0] == '=')
+                mvprintw(i, j * 12, "%-11.2f", eval_formula(sheet[r][c].data));
+            else
+                mvprintw(i, j * 12, "%-11s", sheet[r][c].data[0] ? sheet[r][c].data : ".");
+        }
+    }
     for (int j = 0; j < visible_cols && j + col_offset < ncols; j++) {
         char colname[10];
         cell_name(0, j + col_offset, colname);
-        mvprintw(0, (j+1) * 12, "%-11s", colname);
+        mvprintw(visible_rows + 1, j * 12, "%-11s", colname);
     }
-
-    // Dibujar filas filtradas
-    int line = 1;
-    for (int i = row_offset; i < nrows && line <= visible_rows; i++) {
-        if (!filter_matches(i)) continue;
-        mvprintw(line, 0, "%-3d", i+1);
-        for (int j = 0; j < visible_cols && j + col_offset < ncols; j++) {
-            int c = j + col_offset;
-            if (edit_mode && i == cur_row && c == cur_col)
-                mvprintw(line, (j+1) * 12, "%-11s", edit_buffer);
-            else if (sheet[i][c].data[0] == '=')
-                mvprintw(line, (j+1) * 12, "%-11.2f", eval_formula(sheet[i][c].data));
-            else
-                mvprintw(line, (j+1) * 12, "%-11s", sheet[i][c].data[0] ? sheet[i][c].data : ".");
-        }
-        line++;
-    }
-
-    mvprintw(visible_rows + 2, 0, "Modo: %s", formula_mode ? "FORMULA" : edit_mode ? "EDIT" : "NORMAL");
-    if (formula_mode) mvprintw(visible_rows + 3, 0, "Formula: %s", formula_buffer);
-    if (filter_active) mvprintw(visible_rows + 4, 0, "Filtro activo: Columna %d contiene '%s'", filter_col+1, filter_value);
-
-    move(cur_row - row_offset + 1, (cur_col - col_offset + 1) * 12);
+    mvprintw(visible_rows + 3, 0, "Modo: %s", formula_mode ? "FORMULA" : edit_mode ? "EDIT" : "NORMAL");
+    if (formula_mode) mvprintw(visible_rows + 4, 0, "Formula: %s", formula_buffer);
+    move(cur_row - row_offset, (cur_col - col_offset) * 12);
     refresh();
 }
 
@@ -343,15 +304,9 @@ int main() {
     memset(sheet, 0, sizeof(sheet));
     int ch;
     while (1) {
-        draw_sheet_filtered();
+        draw_sheet();
         ch = getch();
-
-        // --- Navegación tipo Vim ---
         if (!formula_mode && !edit_mode) {
-            if (last_ch == 'g' && ch == 'g') { cur_row = 0; last_ch = 0; continue; } // gg
-            if (ch == 'G') { cur_row = nrows-1; continue; } // G
-            last_ch = (ch == 'g') ? 'g' : 0;
-
             switch(ch) {
                 case 'q': endwin(); return 0;
                 case '=': formula_mode = 1; formula_row = cur_row; formula_col = cur_col;
@@ -376,12 +331,6 @@ int main() {
                 case 'f': fill_formula_column(cur_col); break;
                 case 'R': duplicate_row(cur_row); break;
                 case 'C': duplicate_col(cur_col); break;
-                case '0': cur_col = 0; break;           // inicio de fila
-                case '$': cur_col = ncols-1; break;     // fin de fila
-                case 'H': cur_col = col_offset; break;  // inicio visible
-                case 'L': cur_col = col_offset + (COLS/12) -1; break; // fin visible
-                case 'F': activate_filter(); break;    // activar filtro
-                case 'U': deactivate_filter(); break;  // quitar filtro
             }
         } else if (edit_mode) {
             if (ch == 27) edit_mode = 0;
@@ -417,8 +366,7 @@ int main() {
                     strcpy(sheet[formula_row][formula_col].data, formula_buffer);
                 }
             }
-
-    }
+        }
     }
     endwin();
     return 0;
